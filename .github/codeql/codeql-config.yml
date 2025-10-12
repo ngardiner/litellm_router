@@ -1,0 +1,19 @@
+name: "CodeQL Config"
+
+paths-ignore:
+  - "tests/"
+  - "docs/"
+  - "*.md"
+  - "*.txt"
+  - "*.yml"
+  - "*.yaml"
+
+queries:
+  - uses: security-and-quality
+  - uses: security-experimental
+
+packs:
+  python:
+    - "codeql/python-queries:AlertSuppression.ql"
+    - "codeql/python-queries:Security"
+    - "codeql/python-queries:Analysis"
