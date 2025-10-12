@@ -3,9 +3,12 @@ Main switchboard router for LiteLLM routing platform.
 """
 
 import logging
+import time
 from typing import Optional, List, Dict, Any
 from .database.schema import get_routing_rules, get_module_config
 from .utils.module_loader import get_module_loader
+from .monitoring.metrics import record_routing_metric
+from .monitoring.circuit_breaker import get_circuit_breaker_manager, CircuitBreakerOpenError
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,7 @@ def switchboard(model: str, messages: list, **kwargs) -> Optional[str]:
         None: No routing decision, fall back to default LiteLLM behavior
     """
     logger.info(f"Switchboard received request for model: {model}")
+    start_time = time.time()
     
     try:
         # Get routing rules from database
@@ -50,21 +54,73 @@ def switchboard(model: str, messages: list, **kwargs) -> Optional[str]:
         module_config = get_module_config(module_name)
         logger.debug(f"Module config for {module_name}: {module_config}")
         
-        # Get module loader and call the routing function
+        # Get module loader and call the routing function with circuit breaker protection
         module_loader = get_module_loader()
-        result = module_loader.call_module_route(
-            module_name, model, messages, module_config, **kwargs
-        )
+        circuit_breaker_manager = get_circuit_breaker_manager()
         
-        if result is not None:
-            logger.info(f"Module {module_name} routed {model} to {result}")
-            return result
-        else:
-            logger.info(f"Module {module_name} returned None, using default LiteLLM behavior")
+        try:
+            # Use circuit breaker to protect against module failures
+            result = circuit_breaker_manager.call_with_breaker(
+                module_name,
+                module_loader.call_module_route,
+                module_name, model, messages, module_config, **kwargs
+            )
+            
+            # Record successful routing metric
+            record_routing_metric(
+                model_name=model,
+                module_name=module_name,
+                target_model=result or "default",
+                start_time=start_time,
+                success=True
+            )
+            
+            if result is not None:
+                logger.info(f"Module {module_name} routed {model} to {result}")
+                return result
+            else:
+                logger.info(f"Module {module_name} returned None, using default LiteLLM behavior")
+                return None
+                
+        except CircuitBreakerOpenError as e:
+            logger.warning(f"Circuit breaker open for module {module_name}: {e}")
+            # Record circuit breaker failure
+            record_routing_metric(
+                model_name=model,
+                module_name=module_name,
+                target_model="circuit_breaker_open",
+                start_time=start_time,
+                success=False,
+                error_message=str(e)
+            )
+            # Fall back to default behavior
             return None
+            
+        except Exception as e:
+            logger.error(f"Error in module {module_name}: {e}")
+            # Record module failure
+            record_routing_metric(
+                model_name=model,
+                module_name=module_name,
+                target_model="error",
+                start_time=start_time,
+                success=False,
+                error_message=str(e)
+            )
+            # Continue to fall back to default behavior
+            raise
     
     except Exception as e:
         logger.error(f"Error in switchboard for model {model}: {e}")
+        # Record general switchboard failure
+        record_routing_metric(
+            model_name=model,
+            module_name="switchboard_error",
+            target_model="error",
+            start_time=start_time,
+            success=False,
+            error_message=str(e)
+        )
         # On any error, fall back to default LiteLLM behavior
         return None
 
