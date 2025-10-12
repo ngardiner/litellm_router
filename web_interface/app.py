@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 # Import routing components
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from routing.database.schema import (
     get_routing_rules, get_module_config, set_module_config,
@@ -511,4 +511,57 @@ async def cleanup_old_metrics(days: int = 30):
         return {"message": f"Cleaned up metrics older than {days} days"}
     except Exception as e:
         logger.error(f"Failed to cleanup metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/hot-reload/status")
+async def get_hot_reload_status():
+    """Get hot reload system status."""
+    try:
+        from routing.utils.hot_reload import get_hot_reloader
+        hot_reloader = get_hot_reloader()
+        status = hot_reloader.get_status()
+        return status
+    except Exception as e:
+        logger.error(f"Failed to get hot reload status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/hot-reload/start")
+async def start_hot_reload():
+    """Start the hot reload system."""
+    try:
+        from routing.utils.hot_reload import start_hot_reloading
+        start_hot_reloading()
+        return {"message": "Hot reload system started"}
+    except Exception as e:
+        logger.error(f"Failed to start hot reload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/hot-reload/stop")
+async def stop_hot_reload():
+    """Stop the hot reload system."""
+    try:
+        from routing.utils.hot_reload import stop_hot_reloading
+        stop_hot_reloading()
+        return {"message": "Hot reload system stopped"}
+    except Exception as e:
+        logger.error(f"Failed to stop hot reload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/hot-reload/reload/{module_name}")
+async def manual_reload_module(module_name: str):
+    """Manually reload a specific module."""
+    try:
+        from routing.utils.hot_reload import manual_reload_module
+        success = manual_reload_module(module_name)
+        
+        if success:
+            return {"message": f"Module {module_name} reloaded successfully"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Failed to reload module {module_name}")
+    except Exception as e:
+        logger.error(f"Failed to reload module {module_name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

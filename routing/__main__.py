@@ -43,7 +43,7 @@ def cmd_health_check():
         print(f"Status: {result['status']}")
         print(f"Database: {result['database']}")
         print(f"Modules: {result['modules']}")
-        if result['errors']:
+        if result["errors"]:
             print(f"Errors: {result['errors']}")
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -101,6 +101,13 @@ def main():
     subparsers.add_parser('circuit-breaker-status', help='Show circuit breaker status')
     subparsers.add_parser('performance-report', help='Generate performance report')
     
+    # Hot reload commands
+    subparsers.add_parser('start-hot-reload', help='Start hot reloading system')
+    subparsers.add_parser('stop-hot-reload', help='Stop hot reloading system')
+    subparsers.add_parser('hot-reload-status', help='Show hot reload system status')
+    reload_parser = subparsers.add_parser('reload-module', help='Manually reload a module')
+    reload_parser.add_argument('module_name', help='Name of the module to reload')
+    
     args = parser.parse_args()
     
     if args.command == 'init-db':
@@ -121,6 +128,14 @@ def main():
         cmd_circuit_breaker_status()
     elif args.command == 'performance-report':
         cmd_performance_report()
+    elif args.command == 'start-hot-reload':
+        cmd_start_hot_reload()
+    elif args.command == 'stop-hot-reload':
+        cmd_stop_hot_reload()
+    elif args.command == 'hot-reload-status':
+        cmd_hot_reload_status()
+    elif args.command == 'reload-module':
+        cmd_reload_module()
     else:
         parser.print_help()
 
@@ -253,4 +268,91 @@ def cmd_performance_report():
             
     except Exception as e:
         logger.error(f"Failed to generate performance report: {e}")
+        sys.exit(1)
+
+
+def cmd_start_hot_reload():
+    """Start hot reloading system."""
+    try:
+        from .utils.hot_reload import start_hot_reloading
+        start_hot_reloading()
+        logger.info("Hot reloading system started")
+        logger.info("Hot reloader will watch for changes in routing/modules/")
+        logger.info("Press Ctrl+C to stop")
+        
+        # Keep the process running
+        import time
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Stopping hot reloading system...")
+            from .utils.hot_reload import stop_hot_reloading
+            stop_hot_reloading()
+            logger.info("Hot reloading system stopped")
+            
+    except Exception as e:
+        logger.error(f"Hot reloading failed: {e}")
+        sys.exit(1)
+
+
+def cmd_stop_hot_reload():
+    """Stop hot reloading system."""
+    try:
+        from .utils.hot_reload import stop_hot_reloading
+        stop_hot_reloading()
+        logger.info("Hot reloading system stopped")
+    except Exception as e:
+        logger.error(f"Failed to stop hot reloading: {e}")
+        sys.exit(1)
+
+
+def cmd_reload_module():
+    """Manually reload a specific module."""
+    parser = argparse.ArgumentParser(description='Manually reload a module')
+    parser.add_argument('module_name', help='Name of the module to reload')
+    args = parser.parse_args(sys.argv[2:])  # Skip 'reload-module' command
+    
+    try:
+        from .utils.hot_reload import manual_reload_module
+        success = manual_reload_module(args.module_name)
+        
+        if success:
+            logger.info(f"Module {args.module_name} reloaded successfully")
+        else:
+            logger.error(f"Failed to reload module {args.module_name}")
+            sys.exit(1)
+            
+    except Exception as e:
+        logger.error(f"Module reload failed: {e}")
+        sys.exit(1)
+
+
+def cmd_hot_reload_status():
+    """Show hot reload system status."""
+    try:
+        from .utils.hot_reload import get_hot_reloader
+        hot_reloader = get_hot_reloader()
+        status = hot_reloader.get_status()
+        
+        print("=== Hot Reload System Status ===")
+        print(f"Enabled: {status['enabled']}")
+        print(f"Watching: {status['watching']}")
+        print(f"Modules Directory: {status['modules_directory']}")
+        print(f"Reload Queue Size: {status['reload_queue_size']}")
+        
+        if status['module_versions']:
+            print("\nModule Versions:")
+            for module, version in status['module_versions'].items():
+                print(f"  {module}: v{version}")
+        
+        if status['registered_callbacks']:
+            print("\nRegistered Callbacks:")
+            for module, count in status['registered_callbacks'].items():
+                print(f"  {module}: {count} callbacks")
+        else:
+            print("\nNo registered callbacks")
+            
+    except Exception as e:
+        logger.error(f"Failed to get hot reload status: {e}")
         sys.exit(1)

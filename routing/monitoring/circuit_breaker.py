@@ -15,18 +15,18 @@ logger = logging.getLogger(__name__)
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"       # Normal operation
-    OPEN = "open"          # Failing, requests blocked
-    HALF_OPEN = "half_open" # Testing if service recovered
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, requests blocked
+    HALF_OPEN = "half_open"  # Testing if service recovered
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker."""
-    failure_threshold: int = 5      # Number of failures to open circuit
-    recovery_timeout: int = 60      # Seconds before trying half-open
-    success_threshold: int = 3      # Successes needed to close from half-open
-    timeout_seconds: float = 30.0   # Request timeout
+    failure_threshold: int = 5  # Number of failures to open circuit
+    recovery_timeout: int = 60  # Seconds before trying half-open
+    success_threshold: int = 3  # Successes needed to close from half-open
+    timeout_seconds: float = 30.0  # Request timeout
 
 
 class CircuitBreaker:
@@ -45,8 +45,13 @@ class CircuitBreaker:
         """Execute function with circuit breaker protection."""
         with self.lock:
             if self.state == CircuitState.OPEN:
-                if time.time() - self.last_failure_time < self.config.recovery_timeout:
-                    raise CircuitBreakerOpenError(f"Circuit breaker {self.name} is OPEN")
+                if (
+                    time.time() - self.last_failure_time
+                    < self.config.recovery_timeout
+                ):
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker {self.name} is OPEN"
+                    )
                 else:
                     # Move to half-open state
                     self.state = CircuitState.HALF_OPEN
@@ -61,7 +66,9 @@ class CircuitBreaker:
             
             # Check for timeout
             if execution_time > self.config.timeout_seconds:
-                raise TimeoutError(f"Function execution exceeded {self.config.timeout_seconds}s")
+                raise TimeoutError(
+                    f"Function execution exceeded {self.config.timeout_seconds}s"
+                )
             
             # Record success
             self._record_success()
@@ -92,10 +99,14 @@ class CircuitBreaker:
             if self.state == CircuitState.CLOSED:
                 if self.failure_count >= self.config.failure_threshold:
                     self.state = CircuitState.OPEN
-                    logger.warning(f"Circuit breaker {self.name} moved to OPEN after {self.failure_count} failures")
+                    logger.warning(
+                        f"Circuit breaker {self.name} moved to OPEN after {self.failure_count} failures"
+                    )
             elif self.state == CircuitState.HALF_OPEN:
                 self.state = CircuitState.OPEN
-                logger.warning(f"Circuit breaker {self.name} moved back to OPEN from HALF_OPEN")
+                logger.warning(
+                    f"Circuit breaker {self.name} moved back to OPEN from HALF_OPEN"
+                )
     
     def get_status(self) -> Dict[str, Any]:
         """Get current circuit breaker status."""
