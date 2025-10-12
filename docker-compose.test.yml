@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # Test Database
+  test_db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: test_litellm
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+    ports:
+      - "5433:5432"
+    networks:
+      - test_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Test Web Interface
+  test_web:
+    build: 
+      context: ./web_interface
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://test_user:test_pass@test_db:5432/test_litellm
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./routing:/app/routing:ro
+    depends_on:
+      test_db:
+        condition: service_healthy
+    networks:
+      - test_network
+    command: >
+      sh -c "
+        python3 -c 'from routing.database.schema import init_database; init_database()' &&
+        python3 -c 'from routing.router import auto_discover_and_register_modules; auto_discover_and_register_modules()' &&
+        uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+networks:
+  test_network:
+    driver: bridge

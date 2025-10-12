@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  litellm_db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jodgojngrfgjqwqkwqdlk}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - ai_stack_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LiteLLM Edge Service
+  litellm_edge:
+    image: ghcr.io/berriai/litellm-database:main-latest
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD:-jodgojngrfgjqwqkwqdlk}@litellm_db:5432/litellm
+    env_file: 
+      - litellm_edge/litellm.env
+    ports:
+      - "4060:4000"
+    volumes:
+      - ./routing:/app/config/routing
+      - ./litellm_edge:/app/config/litellm_edge
+    entrypoint: ["/bin/sh", "/app/config/litellm_edge/entrypoint.sh"]
+    depends_on:
+      litellm_db:
+        condition: service_healthy
+    networks:
+      - ai_stack_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+
+  # LiteLLM Router Web Interface
+  litellm_router_web:
+    build: ./web_interface
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD:-jodgojngrfgjqwqkwqdlk}@litellm_db:5432/litellm
+    ports:
+      - "4061:8000"
+    volumes:
+      - ./routing:/app/routing:ro
+    depends_on:
+      litellm_db:
+        condition: service_healthy
+    networks:
+      - ai_stack_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+
+networks:
+  ai_stack_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
