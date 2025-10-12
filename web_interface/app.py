@@ -24,6 +24,9 @@ from routing.database.schema import (
 from routing.database.connection import get_simple_connection
 from routing.router import health_check, auto_discover_and_register_modules
 from routing.utils.module_loader import get_module_loader
+from routing.monitoring.metrics import get_metrics_collector, get_performance_monitor
+from routing.monitoring.circuit_breaker import get_circuit_breaker_manager
+from routing.database.migrations import get_migration_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -380,3 +383,132 @@ async def get_stats():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.get("/api/metrics/summary")
+async def get_metrics_summary(minutes: int = 60):
+    """Get routing metrics summary."""
+    try:
+        metrics_collector = get_metrics_collector()
+        summary = metrics_collector.get_metrics_summary(since_minutes=minutes)
+        return summary
+    except Exception as e:
+        logger.error(f"Failed to get metrics summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/metrics/performance")
+async def get_performance_report():
+    """Get comprehensive performance report."""
+    try:
+        performance_monitor = get_performance_monitor()
+        report = performance_monitor.get_performance_report()
+        return report
+    except Exception as e:
+        logger.error(f"Failed to get performance report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/metrics/errors")
+async def get_recent_errors(limit: int = 50):
+    """Get recent error metrics."""
+    try:
+        metrics_collector = get_metrics_collector()
+        errors = metrics_collector.get_recent_errors(limit=limit)
+        return {"errors": errors}
+    except Exception as e:
+        logger.error(f"Failed to get recent errors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/circuit-breakers")
+async def get_circuit_breaker_status():
+    """Get circuit breaker status for all modules."""
+    try:
+        cb_manager = get_circuit_breaker_manager()
+        statuses = cb_manager.get_all_statuses()
+        return {"circuit_breakers": statuses}
+    except Exception as e:
+        logger.error(f"Failed to get circuit breaker status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/circuit-breakers/{module_name}/reset")
+async def reset_circuit_breaker(module_name: str):
+    """Reset circuit breaker for a specific module."""
+    try:
+        cb_manager = get_circuit_breaker_manager()
+        success = cb_manager.reset_breaker(module_name)
+        
+        if success:
+            return {"message": f"Circuit breaker reset for {module_name}"}
+        else:
+            raise HTTPException(status_code=404, detail="Circuit breaker not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reset circuit breaker: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/circuit-breakers/reset-all")
+async def reset_all_circuit_breakers():
+    """Reset all circuit breakers."""
+    try:
+        cb_manager = get_circuit_breaker_manager()
+        cb_manager.reset_all_breakers()
+        return {"message": "All circuit breakers reset"}
+    except Exception as e:
+        logger.error(f"Failed to reset all circuit breakers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/migrations/status")
+async def get_migration_status():
+    """Get database migration status."""
+    try:
+        migration_manager = get_migration_manager()
+        status = migration_manager.get_migration_status()
+        return status
+    except Exception as e:
+        logger.error(f"Failed to get migration status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/migrations/migrate")
+async def run_migrations():
+    """Run pending database migrations."""
+    try:
+        migration_manager = get_migration_manager()
+        success = migration_manager.migrate_to_latest()
+        
+        if success:
+            return {"message": "Migrations completed successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Migration failed")
+    except Exception as e:
+        logger.error(f"Failed to run migrations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/metrics/persist")
+async def persist_metrics():
+    """Manually trigger metrics persistence to database."""
+    try:
+        metrics_collector = get_metrics_collector()
+        metrics_collector.persist_metrics_to_db()
+        return {"message": "Metrics persisted to database"}
+    except Exception as e:
+        logger.error(f"Failed to persist metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/metrics/cleanup")
+async def cleanup_old_metrics(days: int = 30):
+    """Clean up old metrics from database."""
+    try:
+        metrics_collector = get_metrics_collector()
+        metrics_collector.cleanup_old_metrics(days_to_keep=days)
+        return {"message": f"Cleaned up metrics older than {days} days"}
+    except Exception as e:
+        logger.error(f"Failed to cleanup metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

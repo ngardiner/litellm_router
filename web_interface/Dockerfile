@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy web interface code
 COPY . .
 
-# Copy routing module (mounted as volume in production)
-COPY ../routing /app/routing
+# Copy routing module (copied into build context by CI/CD)
+COPY routing /app/routing
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash app
