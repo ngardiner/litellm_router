@@ -143,7 +143,7 @@ jobs:
       run: |
         # Create minimal test environment
         echo "POSTGRES_PASSWORD=test123" > .env
-        docker-compose -f docker-compose.test.yml config
+        docker compose -f docker-compose.test.yml config
 
   performance-test:
     name: Performance Benchmarks
@@ -277,7 +277,7 @@ jobs:
     - name: Start test stack
       run: |
         echo "POSTGRES_PASSWORD=test123" > .env
-        docker-compose -f docker-compose.test.yml up -d
+        docker compose -f docker-compose.test.yml up -d
         sleep 30
     
     - name: Wait for services
@@ -331,7 +331,7 @@ jobs:
     - name: Cleanup
       if: always()
       run: |
-        docker-compose -f docker-compose.test.yml down -v
+        docker compose -f docker-compose.test.yml down -v
 
   notification:
     name: Build Status Notification

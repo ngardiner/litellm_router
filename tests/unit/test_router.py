@@ -66,7 +66,7 @@ class TestSwitchboard:
         
         assert result is None
     
-    @patch('routing.router.get_simple_connection')
+    @patch('routing.database.connection.get_simple_connection')
     def test_register_routing_rule(self, mock_get_conn):
         """Test registering a routing rule."""
         mock_conn = MagicMock()
