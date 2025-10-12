@@ -292,3 +292,168 @@ async function deleteRule(modelName) {
         alert('Failed to delete rule');
     }
 }
+// Modules functions
+async function loadModules() {
+    try {
+        const response = await fetch(`${API_BASE}/modules`);
+        const modules = await response.json();
+        
+        let modulesHtml = '';
+        
+        if (modules.length === 0) {
+            modulesHtml = '<div class="alert alert-info">No modules found. Click "Discover Modules" to scan for available modules.</div>';
+        } else {
+            modules.forEach(module => {
+                const statusBadge = module.enabled ? 
+                    '<span class="badge bg-success">Enabled</span>' : 
+                    '<span class="badge bg-secondary">Disabled</span>';
+                
+                modulesHtml += `
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h5 class="card-title">
+                                        ${module.display_name} ${statusBadge}
+                                    </h5>
+                                    <p class="card-text">${module.description}</p>
+                                    <small class="text-muted">
+                                        Module: <code>${module.module_name}</code> | 
+                                        Version: ${module.version}
+                                    </small>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="showModuleConfig('${module.module_name}')">
+                                        <i class="fas fa-cog"></i> Configure
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        document.getElementById('modules-list').innerHTML = modulesHtml;
+        
+    } catch (error) {
+        console.error('Failed to load modules:', error);
+        document.getElementById('modules-list').innerHTML = 
+            '<div class="alert alert-danger">Failed to load modules</div>';
+    }
+}
+
+async function discoverModules() {
+    try {
+        const response = await fetch(`${API_BASE}/modules/discover`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            loadModules();
+            loadStats();
+            alert('Module discovery completed successfully');
+        } else {
+            const error = await response.json();
+            alert(`Module discovery failed: ${error.detail}`);
+        }
+        
+    } catch (error) {
+        console.error('Failed to discover modules:', error);
+        alert('Failed to discover modules');
+    }
+}
+
+// Cooldowns functions
+async function loadCooldowns() {
+    try {
+        const response = await fetch(`${API_BASE}/cooldowns`);
+        const cooldowns = await response.json();
+        
+        let tableHtml = `
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Model Key</th>
+                        <th>Cooldown Until</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        if (cooldowns.length === 0) {
+            tableHtml += `
+                <tr>
+                    <td colspan="4" class="text-center">No cooldowns found</td>
+                </tr>
+            `;
+        } else {
+            cooldowns.forEach(cooldown => {
+                const statusBadge = cooldown.is_active ? 
+                    '<span class="badge bg-warning">Active</span>' : 
+                    '<span class="badge bg-success">Expired</span>';
+                
+                const cooldownTime = cooldown.cooldown_until ? 
+                    new Date(cooldown.cooldown_until).toLocaleString() : 'N/A';
+                
+                tableHtml += `
+                    <tr class="${cooldown.is_active ? 'cooldown-active' : ''}">
+                        <td><code>${cooldown.model_key}</code></td>
+                        <td>${cooldownTime}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            ${cooldown.is_active ? `
+                                <button class="btn btn-sm btn-warning" 
+                                        onclick="clearCooldown('${cooldown.model_key}')">
+                                    <i class="fas fa-times"></i> Clear
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+        
+        tableHtml += '</tbody></table>';
+        document.getElementById('cooldowns-table').innerHTML = tableHtml;
+        
+    } catch (error) {
+        console.error('Failed to load cooldowns:', error);
+        document.getElementById('cooldowns-table').innerHTML = 
+            '<div class="alert alert-danger">Failed to load cooldowns</div>';
+    }
+}
+
+async function clearCooldown(modelKey) {
+    if (!confirm(`Are you sure you want to clear the cooldown for "${modelKey}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/cooldowns/${encodeURIComponent(modelKey)}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            loadCooldowns();
+            loadStats();
+        } else {
+            const error = await response.json();
+            alert(`Failed to clear cooldown: ${error.detail}`);
+        }
+        
+    } catch (error) {
+        console.error('Failed to clear cooldown:', error);
+        alert('Failed to clear cooldown');
+    }
+}
+
+// Auto-refresh dashboard every 30 seconds
+setInterval(() => {
+    if (currentTab === 'dashboard') {
+        loadStats();
+    }
+}, 30000);
