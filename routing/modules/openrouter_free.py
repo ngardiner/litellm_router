@@ -8,7 +8,19 @@ cooldown management to avoid repeated free model failures.
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from ..database.connection import get_simple_connection
+
+try:
+    from ..database.connection import get_simple_connection
+except ImportError:
+    import os as _os
+    import psycopg2 as _psycopg2
+
+    def get_simple_connection():  # type: ignore[misc]
+        import urllib.parse as _urlparse
+        url = _os.environ["DATABASE_URL"]
+        parsed = _urlparse.urlparse(url)
+        clean_url = parsed._replace(query="").geturl()
+        return _psycopg2.connect(clean_url)
 
 logger = logging.getLogger(__name__)
 

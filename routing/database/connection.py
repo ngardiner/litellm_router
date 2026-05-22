@@ -8,6 +8,19 @@ from psycopg2 import pool
 from typing import Optional
 from contextlib import contextmanager
 
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+
+def clean_database_url(url: str) -> str:
+    if not url:
+        return url
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    qs.pop("connection_limit", None)
+    qs.pop("pgbouncer", None)
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+
+
 
 class DatabaseConnection:
     """Database connection manager with connection pooling."""
@@ -22,7 +35,7 @@ class DatabaseConnection:
             raise ValueError("DATABASE_URL environment variable is required")
         
         cls._pool = psycopg2.pool.ThreadedConnectionPool(
-            min_conn, max_conn, database_url
+            min_conn, max_conn, clean_database_url(database_url)
         )
     
     @classmethod
@@ -63,4 +76,4 @@ def get_simple_connection():
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise ValueError("DATABASE_URL environment variable is required")
-    return psycopg2.connect(database_url)
+    return psycopg2.connect(clean_database_url(database_url))

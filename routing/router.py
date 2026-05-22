@@ -215,6 +215,10 @@ def health_check() -> Dict[str, Any]:
         
         for module_name in discovered_modules:
             try:
+                module_type = module_loader.get_module_type(module_name)
+                if module_type == "callback":
+                    results["modules"][module_name] = "callback"
+                    continue
                 is_valid = module_loader.validate_module_interface(module_name)
                 results["modules"][module_name] = "valid" if is_valid else "invalid"
                 if not is_valid:

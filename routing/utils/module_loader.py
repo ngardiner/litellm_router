@@ -61,11 +61,16 @@ class ModuleLoader:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            # Validate module has required interface
+            # Non-routing modules (CustomLogger callbacks, etc.) skip route validation
+            if not getattr(module, 'ROUTING_MODULE', True):
+                self._loaded_modules[module_name] = module
+                logger.info(f"Loaded callback module: {module_name}")
+                return module
+
             if not hasattr(module, 'route'):
                 logger.error(f"Module {module_name} missing required 'route' function")
                 return None
-            
+
             self._loaded_modules[module_name] = module
             logger.info(f"Successfully loaded module: {module_name}")
             return module
@@ -109,26 +114,35 @@ class ModuleLoader:
         """Get list of currently loaded modules."""
         return list(self._loaded_modules.keys())
     
+    def get_module_type(self, module_name: str) -> str:
+        """Return 'routing', 'callback', or 'unknown' for a module."""
+        module = self.load_module(module_name)
+        if module is None:
+            return "unknown"
+        if not getattr(module, 'ROUTING_MODULE', True):
+            return "callback"
+        return "routing"
+
     def validate_module_interface(self, module_name: str) -> bool:
         """Validate that a module implements the required interface."""
         module = self.load_module(module_name)
         if module is None:
             return False
-        
-        # Check for required route function
-        if not hasattr(module, 'route'):
-            return False
-        
-        route_func = getattr(module, 'route')
+
+        # Non-routing modules (callbacks) are always valid
+        if not getattr(module, 'ROUTING_MODULE', True):
+            return True
+
+        route_func = getattr(module, 'route', None)
         if not callable(route_func):
             return False
-        
+
         # Optional: Check for metadata attributes
         metadata_attrs = ['MODULE_NAME', 'MODULE_DESCRIPTION', 'MODULE_VERSION']
         for attr in metadata_attrs:
             if hasattr(module, attr):
                 logger.debug(f"Module {module_name} has {attr}: {getattr(module, attr)}")
-        
+
         return True
 
 

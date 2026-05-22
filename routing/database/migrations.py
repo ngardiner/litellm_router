@@ -43,15 +43,63 @@ class MigrationManager:
     def _register_migrations(self) -> None:
         """Register all migrations in order."""
         
-        # Migration 1: Initial schema (already handled by schema.py)
+        # Migration 1: Initial schema
         self.migrations.append(Migration(
             version=1,
             description="Initial schema with routing tables",
             up_sql="""
-                -- This migration is handled by schema.py init_database()
-                SELECT 1;
+                CREATE TABLE IF NOT EXISTS routing_rules (
+                    id SERIAL PRIMARY KEY,
+                    model_name VARCHAR(255) UNIQUE NOT NULL,
+                    module_name VARCHAR(255) NOT NULL,
+                    enabled BOOLEAN DEFAULT true,
+                    priority INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS module_configs (
+                    id SERIAL PRIMARY KEY,
+                    module_name VARCHAR(255) NOT NULL,
+                    config_key VARCHAR(255) NOT NULL,
+                    config_value TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(module_name, config_key)
+                );
+
+                CREATE TABLE IF NOT EXISTS routing_modules (
+                    id SERIAL PRIMARY KEY,
+                    module_name VARCHAR(255) UNIQUE NOT NULL,
+                    display_name VARCHAR(255),
+                    description TEXT,
+                    config_schema JSONB,
+                    version VARCHAR(50),
+                    enabled BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS model_cooldowns (
+                    id SERIAL PRIMARY KEY,
+                    model_key VARCHAR(255) UNIQUE NOT NULL,
+                    cooldown_until TIMESTAMP WITH TIME ZONE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_routing_rules_model_name ON routing_rules(model_name);
+                CREATE INDEX IF NOT EXISTS idx_routing_rules_module_name ON routing_rules(module_name);
+                CREATE INDEX IF NOT EXISTS idx_module_configs_module_name ON module_configs(module_name);
+                CREATE INDEX IF NOT EXISTS idx_model_cooldowns_model_key ON model_cooldowns(model_key);
+                CREATE INDEX IF NOT EXISTS idx_model_cooldowns_cooldown_until ON model_cooldowns(cooldown_until);
             """,
-            down_sql="-- Cannot rollback initial schema"
+            down_sql="""
+                DROP TABLE IF EXISTS model_cooldowns;
+                DROP TABLE IF EXISTS routing_modules;
+                DROP TABLE IF EXISTS module_configs;
+                DROP TABLE IF EXISTS routing_rules;
+            """
         ))
         
         # Migration 2: Add monitoring tables
@@ -112,13 +160,12 @@ class MigrationManager:
             description="Add performance optimizations and indexes",
             up_sql="""
                 -- Add composite indexes for better query performance
-                CREATE INDEX IF NOT EXISTS idx_routing_rules_enabled_priority 
+                CREATE INDEX IF NOT EXISTS idx_routing_rules_enabled_priority
                 ON routing_rules(enabled, priority DESC) WHERE enabled = true;
-                
-                CREATE INDEX IF NOT EXISTS idx_model_cooldowns_active 
-                ON model_cooldowns(model_key, cooldown_until) 
-                WHERE cooldown_until > NOW();
-                
+
+                CREATE INDEX IF NOT EXISTS idx_model_cooldowns_active
+                ON model_cooldowns(model_key, cooldown_until);
+
                 -- Add updated_at triggers for automatic timestamp updates
                 CREATE OR REPLACE FUNCTION update_updated_at_column()
                 RETURNS TRIGGER AS $$
@@ -127,31 +174,30 @@ class MigrationManager:
                     RETURN NEW;
                 END;
                 $$ language 'plpgsql';
-                
-                -- Apply triggers to tables that have updated_at columns
+
                 DROP TRIGGER IF EXISTS update_routing_rules_updated_at ON routing_rules;
-                CREATE TRIGGER update_routing_rules_updated_at 
-                    BEFORE UPDATE ON routing_rules 
+                CREATE TRIGGER update_routing_rules_updated_at
+                    BEFORE UPDATE ON routing_rules
                     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-                
+
                 DROP TRIGGER IF EXISTS update_module_configs_updated_at ON module_configs;
-                CREATE TRIGGER update_module_configs_updated_at 
-                    BEFORE UPDATE ON module_configs 
+                CREATE TRIGGER update_module_configs_updated_at
+                    BEFORE UPDATE ON module_configs
                     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-                
+
                 DROP TRIGGER IF EXISTS update_routing_modules_updated_at ON routing_modules;
-                CREATE TRIGGER update_routing_modules_updated_at 
-                    BEFORE UPDATE ON routing_modules 
+                CREATE TRIGGER update_routing_modules_updated_at
+                    BEFORE UPDATE ON routing_modules
                     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-                
+
                 DROP TRIGGER IF EXISTS update_model_cooldowns_updated_at ON model_cooldowns;
-                CREATE TRIGGER update_model_cooldowns_updated_at 
-                    BEFORE UPDATE ON model_cooldowns 
+                CREATE TRIGGER update_model_cooldowns_updated_at
+                    BEFORE UPDATE ON model_cooldowns
                     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-                
+
                 DROP TRIGGER IF EXISTS update_circuit_breaker_configs_updated_at ON circuit_breaker_configs;
-                CREATE TRIGGER update_circuit_breaker_configs_updated_at 
-                    BEFORE UPDATE ON circuit_breaker_configs 
+                CREATE TRIGGER update_circuit_breaker_configs_updated_at
+                    BEFORE UPDATE ON circuit_breaker_configs
                     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
             """,
             down_sql="""
@@ -164,6 +210,33 @@ class MigrationManager:
                 DROP INDEX IF EXISTS idx_routing_rules_enabled_priority;
                 DROP INDEX IF EXISTS idx_model_cooldowns_active;
             """
+        ))
+
+        # Migration 5: PII token store
+        self.migrations.append(Migration(
+            version=5,
+            description="Add pii_tokens table for bi-directional PII tokenization",
+            up_sql="""
+                CREATE TABLE IF NOT EXISTS pii_tokens (
+                    id SERIAL PRIMARY KEY,
+                    token VARCHAR(64) UNIQUE NOT NULL,
+                    original_value TEXT NOT NULL,
+                    entity_type VARCHAR(50) NOT NULL,
+                    request_id VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_pii_tokens_token
+                ON pii_tokens(token);
+
+                CREATE INDEX IF NOT EXISTS idx_pii_tokens_expires
+                ON pii_tokens(expires_at);
+
+                CREATE INDEX IF NOT EXISTS idx_pii_tokens_request
+                ON pii_tokens(request_id) WHERE request_id IS NOT NULL;
+            """,
+            down_sql="DROP TABLE IF EXISTS pii_tokens;"
         ))
     
     def get_current_version(self) -> int:
