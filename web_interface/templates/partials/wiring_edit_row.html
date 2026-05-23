@@ -1,0 +1,65 @@
+{% from "partials/_config_form.html" import render_config_form %}
+<tr id="rule-row-edit-{{ rule.model_name | replace('.', '-') | replace('/', '-') }}">
+  <td colspan="6" class="p-0">
+    <div class="p-3 bg-light border-bottom">
+      <form hx-post="/api/routing-rules/{{ rule.model_name | urlencode }}"
+            hx-target="#edit-result-{{ rule.model_name | replace('.', '-') | replace('/', '-') }}"
+            hx-trigger="submit"
+            hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET', '/ui/wiring', {target:'#content', swap:'innerHTML'}); }">
+        <input type="hidden" name="_method" value="PUT">
+        <div class="row g-2 align-items-start">
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Model Name</label>
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   value="{{ rule.model_name }}" disabled>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Module</label>
+            <select class="form-select form-select-sm" name="module_name"
+                    hx-get="/ui/wiring/rule-form"
+                    hx-include="[name='module_name']"
+                    hx-target="#edit-instance-config-{{ rule.model_name | replace('.', '-') | replace('/', '-') }}"
+                    hx-trigger="change"
+                    hx-swap="innerHTML">
+              {% for mod in available_modules %}
+              <option value="{{ mod.module_name }}"
+                      {% if mod.module_name == rule.module_name %}selected{% endif %}>
+                {{ mod.display_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small mb-1">Priority</label>
+            <input type="number" class="form-control form-control-sm" name="priority"
+                   value="{{ rule.priority }}">
+          </div>
+          <div class="col-md-2 d-flex align-items-end pb-1">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="enabled" value="true"
+                     {% if rule.enabled %}checked{% endif %}>
+              <label class="form-check-label small">Enabled</label>
+            </div>
+          </div>
+          <div class="col-md-2 d-flex align-items-end gap-1 pb-1 flex-wrap">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="fas fa-save me-1"></i>Save
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    onclick="htmx.ajax('GET', '/ui/wiring', {target:'#content', swap:'innerHTML'})">
+              Cancel
+            </button>
+            <span id="edit-result-{{ rule.model_name | replace('.', '-') | replace('/', '-') }}" class="small text-muted w-100"></span>
+          </div>
+        </div>
+
+        {# Current instance config fields #}
+        <div id="edit-instance-config-{{ rule.model_name | replace('.', '-') | replace('/', '-') }}" class="mt-2">
+          {% if module_schema and module_schema.get('properties') %}
+          {{ render_config_form(module_schema.get('properties', {}), rule.instance_config or {}, prefix='instance_config') }}
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </td>
+</tr>

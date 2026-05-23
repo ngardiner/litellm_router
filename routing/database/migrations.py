@@ -238,7 +238,43 @@ class MigrationManager:
             """,
             down_sql="DROP TABLE IF EXISTS pii_tokens;"
         ))
-    
+
+        # Migration 6: per-instance module config on routing rules
+        self.migrations.append(Migration(
+            version=6,
+            description="Add instance_config column to routing_rules for per-rule module overrides",
+            up_sql="""
+                ALTER TABLE routing_rules
+                ADD COLUMN IF NOT EXISTS instance_config JSONB DEFAULT '{}';
+            """,
+            down_sql="""
+                ALTER TABLE routing_rules DROP COLUMN IF EXISTS instance_config;
+            """
+        ))
+
+        # Migration 7: quality assessor weight store
+        self.migrations.append(Migration(
+            version=7,
+            description="Add quality_assessor_weights table for background scoring",
+            up_sql="""
+                CREATE TABLE IF NOT EXISTS quality_assessor_weights (
+                    id SERIAL PRIMARY KEY,
+                    rule_model_name VARCHAR(255) NOT NULL,
+                    candidate_model VARCHAR(255) NOT NULL,
+                    score FLOAT NOT NULL DEFAULT 0.5,
+                    last_assessed_at TIMESTAMP WITH TIME ZONE,
+                    assessment_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(rule_model_name, candidate_model)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_qa_weights_rule
+                ON quality_assessor_weights(rule_model_name);
+            """,
+            down_sql="DROP TABLE IF EXISTS quality_assessor_weights;"
+        ))
+
     def get_current_version(self) -> int:
         """Get current database schema version."""
         try:

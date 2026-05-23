@@ -1,0 +1,141 @@
+{% from "partials/_config_form.html" import render_config_form %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0"><i class="fas fa-sitemap me-2"></i>Wiring</h2>
+  <button class="btn btn-primary btn-sm"
+          onclick="document.getElementById('add-rule-form').classList.toggle('d-none')">
+    <i class="fas fa-plus me-1"></i>Add Rule
+  </button>
+</div>
+
+{# Add rule form (collapsed by default) #}
+<div id="add-rule-form" class="card mb-4 d-none">
+  <div class="card-header fw-semibold">New Routing Rule</div>
+  <div class="card-body">
+    <form hx-post="/api/routing-rules"
+          hx-target="#add-rule-result"
+          hx-trigger="submit"
+          hx-on::after-request="if(event.detail.successful){ document.getElementById('add-rule-form').classList.add('d-none'); htmx.ajax('GET', '/ui/wiring', {target:'#content', swap:'innerHTML'}); }">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Model Name <span class="text-danger">*</span></label>
+          <input type="text" class="form-control font-monospace" name="model_name"
+                 placeholder="e.g. my-best-model" required>
+          <div class="form-text">The model identifier clients will request.</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Module <span class="text-danger">*</span></label>
+          <select class="form-select" name="module_name" required
+                  hx-get="/ui/wiring/rule-form"
+                  hx-include="[name='module_name']"
+                  hx-target="#instance-config-fields"
+                  hx-trigger="change"
+                  hx-swap="innerHTML">
+            <option value="">— select module —</option>
+            {% for mod in available_modules %}
+            <option value="{{ mod.module_name }}">{{ mod.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Priority</label>
+          <input type="number" class="form-control" name="priority" value="0">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" name="enabled" value="true" checked>
+            <label class="form-check-label">Enabled</label>
+          </div>
+        </div>
+      </div>
+
+      {# Instance config fields loaded dynamically on module select #}
+      <div id="instance-config-fields" class="mt-3"></div>
+
+      <div class="mt-3 d-flex gap-2 align-items-center">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="fas fa-save me-1"></i>Save Rule
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                onclick="document.getElementById('add-rule-form').classList.add('d-none')">
+          Cancel
+        </button>
+        <span id="add-rule-result" class="small text-muted ms-2"></span>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# Rules table #}
+<div class="card">
+  <div class="card-body p-0">
+    {% if rules %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Model Name</th>
+            <th>Module</th>
+            <th>Priority</th>
+            <th>Instance Config</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for rule in rules %}
+        <tr class="{% if not rule.enabled %}table-secondary{% endif %}" id="rule-row-{{ loop.index }}">
+          <td class="font-monospace align-middle">{{ rule.model_name }}</td>
+          <td class="align-middle">
+            <span class="badge bg-light text-dark border">{{ rule.module_name }}</span>
+          </td>
+          <td class="align-middle text-muted">{{ rule.priority }}</td>
+          <td class="align-middle">
+            {% if rule.instance_config %}
+            <span class="small font-monospace text-muted">
+              {% set ic = rule.instance_config %}
+              {% for k, v in ic.items() %}
+                <span class="badge bg-light text-dark border me-1">
+                  {{ k }}: {{ v | truncate(20, True, '…') if v is string else v }}
+                </span>
+              {% endfor %}
+            </span>
+            {% else %}
+            <span class="text-muted small">global defaults</span>
+            {% endif %}
+          </td>
+          <td class="align-middle">
+            {% if rule.enabled %}
+              <span class="badge bg-success">Enabled</span>
+            {% else %}
+              <span class="badge bg-secondary">Disabled</span>
+            {% endif %}
+          </td>
+          <td class="text-end align-middle">
+            <button class="btn btn-sm btn-outline-primary me-1"
+                    hx-get="/ui/wiring/edit/{{ rule.model_name | urlencode }}"
+                    hx-target="#rule-row-{{ loop.index }}"
+                    hx-swap="outerHTML">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+                    hx-delete="/api/routing-rules/{{ rule.model_name | urlencode }}"
+                    hx-trigger="click"
+                    hx-confirm="Delete rule for '{{ rule.model_name }}'?"
+                    hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET', '/ui/wiring', {target:'#content', swap:'innerHTML'}); }">
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="fas fa-sitemap fa-2x mb-3 d-block opacity-25"></i>
+      No routing rules yet. Add one above to wire a model to a module.
+    </div>
+    {% endif %}
+  </div>
+</div>

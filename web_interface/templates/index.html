@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}LiteLLM Router{% endblock %}
+{% block content %}
+<div id="content" hx-get="/ui/modules" hx-trigger="load">
+  <div class="text-center py-5 text-muted">
+    <i class="fas fa-spinner fa-spin fa-2x"></i>
+  </div>
+</div>
+{% endblock %}

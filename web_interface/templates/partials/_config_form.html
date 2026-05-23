@@ -1,0 +1,77 @@
+{#
+  Macro: render_config_form
+  Renders form fields from a JSON Schema "properties" dict.
+
+  Parameters:
+    properties  – dict of {key: schema_property}
+    values      – dict of current values (may be empty)
+    prefix      – HTML name prefix (e.g. "instance" → name="instance[key]")
+    read_only   – render as static text instead of inputs
+#}
+{% macro render_config_form(properties, values, prefix='config', read_only=False) %}
+{% for key, prop in properties.items() %}
+<div class="mb-3">
+  {% set val = values.get(key, prop.get('default', '')) %}
+  {% set field_id = prefix ~ '_' ~ key %}
+  {% set field_name = prefix ~ '[' ~ key ~ ']' %}
+  {% set ptype = prop.get('type', 'string') %}
+  {% set label = key.replace('_', ' ').title() %}
+
+  {% if not read_only %}
+    {% if ptype == 'boolean' %}
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="{{ field_id }}"
+               name="{{ field_name }}" value="true"
+               {% if val %}checked{% endif %}>
+        <label class="form-check-label" for="{{ field_id }}">{{ label }}</label>
+      </div>
+    {% elif ptype in ('integer', 'number') %}
+      <label class="form-label" for="{{ field_id }}">{{ label }}</label>
+      <input type="number" class="form-control" id="{{ field_id }}"
+             name="{{ field_name }}" value="{{ val }}"
+             {% if prop.get('minimum') is not none %}min="{{ prop.minimum }}"{% endif %}
+             {% if prop.get('maximum') is not none %}max="{{ prop.maximum }}"{% endif %}
+             {% if prop.get('default') is not none %}placeholder="{{ prop.default }}"{% endif %}>
+    {% elif ptype == 'string' and prop.get('enum') %}
+      <label class="form-label" for="{{ field_id }}">{{ label }}</label>
+      <select class="form-select" id="{{ field_id }}" name="{{ field_name }}">
+        {% for opt in prop.enum %}
+          <option value="{{ opt }}" {% if val == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    {% elif ptype == 'array' %}
+      <label class="form-label" for="{{ field_id }}">{{ label }} <small class="text-muted">(JSON array)</small></label>
+      <textarea class="form-control font-monospace" id="{{ field_id }}"
+                name="{{ field_name }}" rows="3"
+                placeholder='["model-a", "model-b"]'>{{ val | tojson if val else '[]' }}</textarea>
+    {% elif ptype == 'object' %}
+      <label class="form-label" for="{{ field_id }}">{{ label }} <small class="text-muted">(JSON object)</small></label>
+      <textarea class="form-control font-monospace" id="{{ field_id }}"
+                name="{{ field_name }}" rows="3">{{ val | tojson if val else '{}' }}</textarea>
+    {% else %}
+      <label class="form-label" for="{{ field_id }}">{{ label }}</label>
+      <input type="text" class="form-control" id="{{ field_id }}"
+             name="{{ field_name }}" value="{{ val }}"
+             {% if prop.get('default') is not none %}placeholder="{{ prop.default }}"{% endif %}>
+    {% endif %}
+    {% if prop.get('description') %}
+      <div class="form-text text-muted">{{ prop.description }}</div>
+    {% endif %}
+  {% else %}
+    {# read-only display #}
+    <label class="form-label text-muted small">{{ label }}</label>
+    <div class="text-break">
+      {% if val is none or val == '' %}
+        <span class="text-muted fst-italic">not set</span>
+      {% elif ptype == 'boolean' %}
+        <span class="badge {% if val %}bg-success{% else %}bg-secondary{% endif %}">
+          {{ 'yes' if val else 'no' }}
+        </span>
+      {% else %}
+        <code class="small">{{ val }}</code>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endmacro %}

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}LiteLLM Router{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/app.css" rel="stylesheet">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand fw-bold" href="/">
+      <i class="fas fa-route me-2"></i>LiteLLM Router
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="nav">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="#"
+             hx-get="/ui/modules" hx-target="#content"
+             onclick="setActive(this)">
+            <i class="fas fa-puzzle-piece me-1"></i>Modules
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#"
+             hx-get="/ui/wiring" hx-target="#content"
+             onclick="setActive(this)">
+            <i class="fas fa-sitemap me-1"></i>Wiring
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#"
+             hx-get="/ui/observability" hx-target="#content"
+             onclick="setActive(this)">
+            <i class="fas fa-chart-line me-1"></i>Observability
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#"
+             hx-get="/ui/system" hx-target="#content"
+             onclick="setActive(this)">
+            <i class="fas fa-cogs me-1"></i>System
+          </a>
+        </li>
+      </ul>
+      <span class="navbar-text" id="system-status-badge">
+        <span class="badge bg-secondary">checking…</span>
+      </span>
+    </div>
+  </div>
+</nav>
+
+<div id="toast-container" class="position-fixed top-0 end-0 p-3" style="z-index:1100"></div>
+
+<div class="container-fluid px-4 py-4">
+  {% block content %}
+  <div id="content" hx-get="/ui/modules" hx-trigger="load">
+    <div class="text-center py-5 text-muted">
+      <i class="fas fa-spinner fa-spin fa-2x"></i>
+    </div>
+  </div>
+  {% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function setActive(el) {
+  document.querySelectorAll('.navbar-nav .nav-link').forEach(l => l.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function showToast(msg, type='success') {
+  const id = 'toast-' + Date.now();
+  const html = `
+    <div id="${id}" class="toast align-items-center text-bg-${type} border-0 show" role="alert">
+      <div class="d-flex">
+        <div class="toast-body">${msg}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>`;
+  document.getElementById('toast-container').insertAdjacentHTML('beforeend', html);
+  setTimeout(() => document.getElementById(id)?.remove(), 4000);
+}
+
+// htmx response handler for API calls that return JSON {message:...} or {detail:...}
+document.body.addEventListener('htmx:afterRequest', function(evt) {
+  const xhr = evt.detail.xhr;
+  if (!xhr) return;
+  // Only handle non-HTML responses (API calls)
+  const ct = xhr.getResponseHeader('content-type') || '';
+  if (!ct.includes('application/json')) return;
+  try {
+    const data = JSON.parse(xhr.responseText);
+    if (xhr.status >= 400) {
+      showToast(data.detail || 'Request failed', 'danger');
+    } else if (data.message) {
+      showToast(data.message, 'success');
+    }
+  } catch(e) {}
+});
+
+// Poll system health for navbar badge
+async function pollHealth() {
+  try {
+    const r = await fetch('/api/health');
+    const h = await r.json();
+    const badge = document.getElementById('system-status-badge');
+    if (badge) {
+      const ok = h.status === 'healthy';
+      badge.innerHTML = `<span class="badge bg-${ok ? 'success' : 'danger'}">${ok ? 'Healthy' : 'Unhealthy'}</span>`;
+    }
+  } catch(e) {}
+}
+pollHealth();
+setInterval(pollHealth, 30000);
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

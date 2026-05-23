@@ -1,0 +1,22 @@
+{% from "partials/_config_form.html" import render_config_form %}
+
+<div class="card-body border-top bg-light">
+  <form hx-post="/api/modules/{{ module_name }}/config"
+        hx-target="#config-panel-{{ module_name }}"
+        hx-swap="innerHTML"
+        hx-on::after-request="this.closest('.card-body').innerHTML='<span class=\'text-success small\'><i class=\'fas fa-check me-1\'></i>Saved</span>'; setTimeout(()=>this.closest(\'.card-body\').innerHTML='',2000)">
+    <div class="mb-2 d-flex justify-content-between align-items-center">
+      <span class="fw-semibold small">Default Configuration</span>
+      <button type="button" class="btn-close btn-sm"
+              onclick="this.closest('.card-body').innerHTML=''"></button>
+    </div>
+    {{ render_config_form(schema.get('properties', {}), current_config) }}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="fas fa-save me-1"></i>Save Defaults
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              onclick="this.closest('.card-body').innerHTML=''">Cancel</button>
+    </div>
+  </form>
+</div>

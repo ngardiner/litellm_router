@@ -38,20 +38,23 @@ def switchboard(model: str, messages: list, **kwargs) -> Optional[str]:
         
         # Find matching rule for the requested model
         matching_rule = None
-        for rule_model, rule_module, enabled, priority in routing_rules:
+        for row in routing_rules:
+            rule_model, rule_module, enabled, priority = row[0], row[1], row[2], row[3]
+            instance_config = row[4] if len(row) > 4 else {}
             if rule_model == model and enabled:
-                matching_rule = (rule_module, priority)
+                matching_rule = (rule_module, priority, instance_config or {})
                 break
-        
+
         if matching_rule is None:
             logger.info(f"No routing rule found for model '{model}'. Using default LiteLLM behavior.")
             return None
-        
-        module_name, priority = matching_rule
+
+        module_name, priority, instance_config = matching_rule
         logger.info(f"Found routing rule: {model} -> {module_name} (priority: {priority})")
-        
-        # Load module configuration
-        module_config = get_module_config(module_name)
+
+        # Merge global module config with per-rule instance overrides
+        global_config = get_module_config(module_name)
+        module_config = {**global_config, **instance_config}
         logger.debug(f"Module config for {module_name}: {module_config}")
         
         # Get module loader and call the routing function with circuit breaker protection

@@ -1,0 +1,85 @@
+/* ─── layout ─────────────────────────────────────────────── */
+body {
+  background-color: #f8f9fa;
+}
+
+#content {
+  min-height: 400px;
+}
+
+/* ─── navbar ─────────────────────────────────────────────── */
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.nav-link.active {
+  font-weight: 600;
+}
+
+/* ─── module cards ───────────────────────────────────────── */
+.module-card {
+  transition: box-shadow 0.15s ease;
+}
+
+.module-card:hover {
+  box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,.08);
+}
+
+.callback-card .card-header {
+  background-color: #f0f8ff;
+}
+
+/* ─── circuit-breaker status colours ────────────────────── */
+.cb-open    { color: #dc3545; }
+.cb-half    { color: #fd7e14; }
+.cb-closed  { color: #198754; }
+
+/* ─── toast container ────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 1090;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+#toast-container .toast {
+  pointer-events: auto;
+  min-width: 260px;
+}
+
+/* ─── htmx loading indicator ─────────────────────────────── */
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+/* ─── config panel inline expansion ─────────────────────── */
+[id^="config-panel-"] {
+  transition: all 0.15s ease;
+}
+
+/* ─── table tweaks ───────────────────────────────────────── */
+.table td, .table th {
+  vertical-align: middle;
+}
+
+/* ─── monospace form inputs ──────────────────────────────── */
+.font-monospace input,
+.font-monospace select {
+  font-family: var(--bs-font-monospace);
+}
+
+/* ─── small badge wrapping ───────────────────────────────── */
+.badge-wrap {
+  white-space: normal;
+  text-align: left;
+}

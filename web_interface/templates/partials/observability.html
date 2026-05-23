@@ -1,0 +1,215 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0"><i class="fas fa-chart-line me-2"></i>Observability</h2>
+  <button class="btn btn-outline-secondary btn-sm"
+          hx-get="/ui/observability"
+          hx-target="#content"
+          hx-trigger="click">
+    <i class="fas fa-sync-alt me-1"></i>Refresh
+  </button>
+</div>
+
+{# Summary stats row #}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Requests (1h)</div>
+        <div class="fs-4 fw-bold">{{ summary.requests_1h | default(0) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Success Rate</div>
+        <div class="fs-4 fw-bold {% if summary.success_rate >= 0.95 %}text-success{% elif summary.success_rate >= 0.8 %}text-warning{% else %}text-danger{% endif %}">
+          {{ "%.1f"|format(summary.success_rate * 100) }}%
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Avg Latency</div>
+        <div class="fs-4 fw-bold">{{ "%.0f"|format(summary.avg_latency_ms) }}ms</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small mb-1">Active Cooldowns</div>
+        <div class="fs-4 fw-bold {% if summary.active_cooldowns > 0 %}text-warning{% endif %}">
+          {{ summary.active_cooldowns | default(0) }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  {# Left column: metrics table + circuit breakers #}
+  <div class="col-lg-8">
+
+    {# Per-module metrics #}
+    <div class="card mb-4">
+      <div class="card-header fw-semibold">Module Metrics</div>
+      {% if metrics %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Module</th>
+              <th class="text-end">Requests</th>
+              <th class="text-end">Success</th>
+              <th class="text-end">Errors</th>
+              <th class="text-end">Avg Latency</th>
+              <th class="text-end">P95 Latency</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for m in metrics %}
+          <tr>
+            <td class="font-monospace small">{{ m.module_name }}</td>
+            <td class="text-end">{{ m.total_requests }}</td>
+            <td class="text-end text-success">{{ m.successful_requests }}</td>
+            <td class="text-end {% if m.failed_requests > 0 %}text-danger{% endif %}">{{ m.failed_requests }}</td>
+            <td class="text-end text-muted">{{ "%.0f"|format(m.avg_latency_ms or 0) }}ms</td>
+            <td class="text-end text-muted">{{ "%.0f"|format(m.p95_latency_ms or 0) }}ms</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-body text-center text-muted py-4">
+        <i class="fas fa-chart-bar fa-2x mb-2 d-block opacity-25"></i>
+        No metrics yet.
+      </div>
+      {% endif %}
+    </div>
+
+    {# Recent errors #}
+    {% if recent_errors %}
+    <div class="card">
+      <div class="card-header fw-semibold d-flex justify-content-between">
+        <span>Recent Errors</span>
+        <span class="badge bg-danger">{{ recent_errors | length }}</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="accordion accordion-flush" id="errorsAccordion">
+          {% for err in recent_errors %}
+          <div class="accordion-item">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed py-2 small" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#err-{{ loop.index }}">
+                <span class="text-muted me-2">{{ err.recorded_at | replace('T', ' ') | truncate(19, True, '') }}</span>
+                <span class="badge bg-light text-dark border me-2">{{ err.module_name }}</span>
+                <span class="text-danger text-truncate" style="max-width:40ch">{{ err.error_message }}</span>
+              </button>
+            </h2>
+            <div id="err-{{ loop.index }}" class="accordion-collapse collapse">
+              <div class="accordion-body py-2">
+                <pre class="small mb-0 text-wrap">{{ err.error_message }}</pre>
+                {% if err.model_used %}
+                <div class="text-muted small mt-1">Model: <code>{{ err.model_used }}</code></div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# Right column: circuit breakers + cooldowns #}
+  <div class="col-lg-4">
+
+    {# Circuit breakers #}
+    <div class="card mb-4">
+      <div class="card-header fw-semibold">Circuit Breakers</div>
+      <div class="card-body p-0">
+        {% if circuit_breakers %}
+        <ul class="list-group list-group-flush">
+          {% for cb in circuit_breakers %}
+          <li class="list-group-item d-flex align-items-center gap-2 py-2">
+            {% if cb.state == 'OPEN' %}
+              <span class="badge bg-danger flex-shrink-0">OPEN</span>
+            {% elif cb.state == 'HALF_OPEN' %}
+              <span class="badge bg-warning text-dark flex-shrink-0">HALF</span>
+            {% else %}
+              <span class="badge bg-success flex-shrink-0">OK</span>
+            {% endif %}
+            <span class="small font-monospace flex-grow-1">{{ cb.module_name }}</span>
+            {% if cb.state in ('OPEN', 'HALF_OPEN') %}
+            <button class="btn btn-outline-danger btn-sm py-0 px-1"
+                    hx-post="/api/circuit-breakers/{{ cb.module_name }}/reset"
+                    hx-target="#content"
+                    hx-get="/ui/observability"
+                    hx-trigger="click"
+                    title="Reset circuit breaker">
+              <i class="fas fa-redo fa-xs"></i>
+            </button>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="p-3 text-center text-muted small">No circuit breaker data.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Active cooldowns #}
+    <div class="card">
+      <div class="card-header fw-semibold d-flex justify-content-between">
+        <span>Active Cooldowns</span>
+        {% if cooldowns %}
+        <button class="btn btn-outline-danger btn-sm py-0 px-2"
+                hx-delete="/api/cooldowns"
+                hx-target="#content"
+                hx-get="/ui/observability"
+                hx-trigger="click"
+                hx-confirm="Clear all active cooldowns?">
+          <i class="fas fa-times me-1"></i>Clear All
+        </button>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        {% if cooldowns %}
+        <ul class="list-group list-group-flush">
+          {% for cd in cooldowns %}
+          <li class="list-group-item py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small font-monospace">{{ cd.model_key }}</div>
+                {% if cd.cooldown_until %}
+                <div class="text-muted" style="font-size:0.75rem">
+                  until {{ cd.cooldown_until | string | truncate(19, True, '') }}
+                </div>
+                {% endif %}
+              </div>
+              <button class="btn btn-outline-secondary btn-sm py-0 px-1"
+                      hx-delete="/api/cooldowns/{{ cd.model_key | urlencode }}"
+                      hx-target="#content"
+                      hx-get="/ui/observability"
+                      hx-trigger="click"
+                      title="Clear cooldown">
+                <i class="fas fa-times fa-xs"></i>
+              </button>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="p-3 text-center text-muted small">No active cooldowns.</div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>

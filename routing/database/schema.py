@@ -2,6 +2,7 @@
 Database schema definitions and migration management.
 """
 
+import json
 import os
 import psycopg2
 from typing import List, Tuple
@@ -144,19 +145,83 @@ def set_module_config(module_name: str, config_key: str, config_value: str) -> N
             conn.commit()
 
 
-def get_routing_rules() -> List[Tuple[str, str, bool, int]]:
-    """Get all active routing rules."""
+def get_routing_rules() -> List[Tuple]:
+    """Get all active routing rules including instance_config."""
     with get_simple_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT model_name, module_name, enabled, priority 
-                FROM routing_rules 
-                WHERE enabled = true 
+                SELECT model_name, module_name, enabled, priority,
+                       COALESCE(instance_config, '{}')::jsonb
+                FROM routing_rules
+                WHERE enabled = true
                 ORDER BY priority DESC, model_name
                 """
             )
             return cursor.fetchall()
+
+
+def get_all_routing_rules() -> List[Tuple]:
+    """Get all routing rules (enabled and disabled) including instance_config."""
+    with get_simple_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT model_name, module_name, enabled, priority,
+                       COALESCE(instance_config, '{}')::jsonb
+                FROM routing_rules
+                ORDER BY priority DESC, model_name
+                """
+            )
+            return cursor.fetchall()
+
+
+def get_routing_rule(model_name: str) -> dict:
+    """Get a single routing rule by model name."""
+    with get_simple_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT model_name, module_name, enabled, priority,
+                       COALESCE(instance_config, '{}')::jsonb
+                FROM routing_rules
+                WHERE model_name = %s
+                """,
+                (model_name,)
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return {
+                "model_name": row[0],
+                "module_name": row[1],
+                "enabled": row[2],
+                "priority": row[3],
+                "instance_config": row[4] or {},
+            }
+
+
+def upsert_routing_rule(model_name: str, module_name: str, enabled: bool = True,
+                        priority: int = 0, instance_config: dict = None) -> None:
+    """Create or update a routing rule."""
+    with get_simple_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO routing_rules
+                    (model_name, module_name, enabled, priority, instance_config, updated_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (model_name) DO UPDATE SET
+                    module_name = EXCLUDED.module_name,
+                    enabled = EXCLUDED.enabled,
+                    priority = EXCLUDED.priority,
+                    instance_config = EXCLUDED.instance_config,
+                    updated_at = NOW()
+                """,
+                (model_name, module_name, enabled, priority,
+                 json.dumps(instance_config or {}))
+            )
+            conn.commit()
 
 
 def register_module(module_name: str, display_name: str, description: str, 
