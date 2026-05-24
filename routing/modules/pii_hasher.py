@@ -551,6 +551,56 @@ class PIIHasher(_CustomLogger):
             logger.error("PIIHasher: streaming hook error: %s", exc)
             return None
 
+    async def async_logging_hook(
+        self,
+        kwargs: dict,
+        result: Any,
+        call_type: str,
+    ) -> Tuple[dict, Any]:
+        """
+        Scrub PII from logged request/response before LiteLLM writes to spend_logs.
+
+        Called just before data is persisted. Applies the same tokenization as the
+        pre-call hook, so it is idempotent on already-tokenized messages and catches
+        anything that bypassed the pre-call path (e.g. Anthropic passthrough).
+        """
+        if not self.enabled:
+            return kwargs, result
+
+        try:
+            request_id = kwargs.get("litellm_call_id", "unknown")
+
+            # Scrub request messages in kwargs
+            messages = kwargs.get("messages")
+            if messages and isinstance(messages, list):
+                new_messages, changed = self._hash_messages(list(messages), request_id)
+                if changed:
+                    kwargs = {**kwargs, "messages": new_messages}
+
+            # Scrub response content — post-call hooks may have already restored
+            # tokens to original PII for the client; re-hash before logging.
+            try:
+                choices = getattr(result, "choices", None)
+                if choices:
+                    for choice in choices:
+                        message = getattr(choice, "message", None)
+                        if message is None:
+                            continue
+                        content = getattr(message, "content", None)
+                        if isinstance(content, str):
+                            hashed, tokens = _hash_text(content)
+                            if tokens:
+                                self._store_tokens(tokens, request_id)
+                                message.content = hashed
+            except Exception as exc:
+                logger.debug("PIIHasher: logging hook result scrub: %s", exc)
+
+            return kwargs, result
+
+        except Exception as exc:
+            logger.error("PIIHasher: async_logging_hook error: %s", exc)
+            return kwargs, result
+
     # ------------------------------------------------------------------
     # Maintenance
     # ------------------------------------------------------------------
